@@ -12,14 +12,11 @@ import {
 	type Contact,
 	type WAMessage,
 	type GroupMetadata,
-	messageTypeMap,
 	type ConnectionState,
 	type GroupParticipant,
-	type GroupMetadataRow,
-	type GroupMetadataEntry,
-	type GroupMetadataResult,
 	type BaileysEventEmitter
 } from '@whiskeysockets/baileys'
+import { messageTypeMap, type GroupMetadataRow, type GroupMetadataEntry, type GroupMetadataResult } from './types.js'
 import { isJidUser, jidNormalizedUser, isJidStatusBroadcast } from '@whiskeysockets/baileys'
 
 type WASocket = ReturnType<typeof makeWASocket>

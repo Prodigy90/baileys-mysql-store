@@ -7,10 +7,9 @@ type BaileysEventEmitter,
 type Chat,
 type ConnectionState,
 type Contact,
-type GroupMetadata,
-type GroupMetadataResult,
-type GroupMetadataRow
+type GroupMetadata
 } from '@whiskeysockets/baileys'
+import type { GroupMetadataResult, GroupMetadataRow } from './types.js'
 import { OptimizedMySQLStore } from './optimized-mysql-store.js'
 
 type WASocket = ReturnType<typeof makeWASocket>
