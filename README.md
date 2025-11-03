@@ -20,35 +20,35 @@ npm install @baileys/mysql-store @whiskeysockets/baileys mysql2
 ## Usage
 
 ```typescript
-import makeWASocket from '@whiskeysockets/baileys'
-import { makeMySQLStore } from '@baileys/mysql-store'
-import { createPool } from 'mysql2/promise'
+import makeWASocket from "baileys";
+import { makeMySQLStore } from "@baileys/mysql-store";
+import { createPool } from "mysql2/promise";
 
 // Create MySQL connection pool
 const pool = createPool({
-  host: 'localhost',
-  user: 'your_user',
-  database: 'whatsapp_db',
-  password: 'your_password',
+  host: "localhost",
+  user: "your_user",
+  database: "whatsapp_db",
+  password: "your_password",
   connectionLimit: 5
-})
+});
 
 // Initialize the store
 const store = makeMySQLStore(
-  'session_id',  // Your session identifier
-  pool,          // MySQL pool
-  [],            // Optional: array of JIDs to ignore
-  logger         // Optional: Pino logger instance
-)
+  "session_id", // Your session identifier
+  pool, // MySQL pool
+  [], // Optional: array of JIDs to ignore
+  logger // Optional: Pino logger instance
+);
 
 // Create WhatsApp socket
 const sock = makeWASocket({
-  auth: state,
+  auth: state
   // ... other options
-})
+});
 
 // Bind store to socket events
-await store.bind(sock.ev)
+await store.bind(sock.ev);
 ```
 
 ## API
@@ -58,12 +58,14 @@ await store.bind(sock.ev)
 Creates a new MySQL store instance.
 
 **Parameters:**
+
 - `sessionId` (string): Unique identifier for this session
 - `pool` (Pool): mysql2 connection pool
 - `ignoreJids` (string[]): Array of JIDs to ignore (optional)
 - `logger` (Logger): Pino logger instance (optional)
 
 **Returns:** Store instance with methods:
+
 - `bind(ev)` - Bind to Baileys event emitter
 - `loadMessage(id)` - Load a message by ID
 - `getAllChats()` - Get all chats
@@ -74,6 +76,7 @@ Creates a new MySQL store instance.
 ## Database Schema
 
 The store automatically creates the following tables:
+
 - `messages` - WhatsApp messages
 - `chats` - Chat conversations
 - `contacts` - Contact information
@@ -85,12 +88,14 @@ The store automatically creates the following tables:
 ## Performance Features
 
 ### LRU Caching
+
 - **Groups**: 15-minute TTL
 - **Contacts**: 30-minute TTL
 - **Message Types**: 24-hour TTL
 - **Status Viewers**: 5-minute TTL
 
 ### Batch Processing
+
 - Automatic batching of database writes
 - Configurable batch size and flush interval
 - Transaction support for data integrity
