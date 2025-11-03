@@ -277,6 +277,13 @@ export class OptimizedMySQLStore {
   state: ConnectionState | null = null;
   private batchProcessor: BatchProcessor;
 
+  /**
+   * @param pool - MySQL connection pool
+   * @param logger - Pino logger instance
+   * @param instance_id - Unique session identifier
+   * @param skippedGroups - Array of group JIDs to exclude from database storage
+   *                        (unless user is admin/superadmin of the group)
+   */
   constructor(
     private pool: Pool,
     private logger: pino.Logger,

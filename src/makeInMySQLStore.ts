@@ -58,6 +58,41 @@ interface makeMySQLStoreFunc {
   ) => Promise<void>;
 }
 
+/**
+ * Creates a MySQL store instance for Baileys WhatsApp library
+ *
+ * @param instanceId - Unique identifier for this session/instance
+ * @param pool - MySQL connection pool from mysql2/promise
+ * @param skippedGroups - Array of group JIDs to exclude from tracking.
+ *                        Groups in this array will NOT be stored in the database,
+ *                        UNLESS you are an admin/superadmin of the group.
+ *                        Useful for excluding large broadcast groups or communities.
+ *                        Example: ["120363123456789012@g.us"]
+ * @param logger - Optional Pino logger instance for logging
+ * @returns Store instance with methods for managing WhatsApp data
+ *
+ * @example
+ * ```typescript
+ * import { createPool } from 'mysql2/promise';
+ * import { makeMySQLStore } from '@theprodigy/baileys-mysql-store';
+ *
+ * const pool = createPool({
+ *   host: 'localhost',
+ *   user: 'root',
+ *   database: 'whatsapp_db',
+ *   password: 'password'
+ * });
+ *
+ * const store = makeMySQLStore(
+ *   'session_1',
+ *   pool,
+ *   ['120363123456789012@g.us'], // Skip this group
+ *   logger
+ * );
+ *
+ * await store.bind(socket.ev);
+ * ```
+ */
 export function makeMySQLStore(
   instanceId: string,
   pool: Pool,

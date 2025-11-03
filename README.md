@@ -14,14 +14,14 @@ A high-performance MySQL store implementation for [@whiskeysockets/baileys](http
 ## Installation
 
 ```bash
-npm install @baileys/mysql-store @whiskeysockets/baileys mysql2
+npm install @theprodigy/baileys-mysql-store baileys mysql2
 ```
 
 ## Usage
 
 ```typescript
 import makeWASocket from "baileys";
-import { makeMySQLStore } from "@baileys/mysql-store";
+import { makeMySQLStore } from "@theprodigy/baileys-mysql-store";
 import { createPool } from "mysql2/promise";
 
 // Create MySQL connection pool
@@ -37,7 +37,7 @@ const pool = createPool({
 const store = makeMySQLStore(
   "session_id", // Your session identifier
   pool, // MySQL pool
-  [], // Optional: array of JIDs to ignore
+  [], // Optional: array of group JIDs to skip tracking (unless you're admin)
   logger // Optional: Pino logger instance
 );
 
@@ -53,7 +53,7 @@ await store.bind(sock.ev);
 
 ## API
 
-### `makeMySQLStore(sessionId, pool, ignoreJids, logger)`
+### `makeMySQLStore(sessionId, pool, skippedGroups, logger)`
 
 Creates a new MySQL store instance.
 
@@ -61,7 +61,7 @@ Creates a new MySQL store instance.
 
 - `sessionId` (string): Unique identifier for this session
 - `pool` (Pool): mysql2 connection pool
-- `ignoreJids` (string[]): Array of JIDs to ignore (optional)
+- `skippedGroups` (string[]): Array of group JIDs to exclude from tracking. Groups in this list will not be stored in the database unless you are an admin/superadmin of the group. Useful for excluding large broadcast groups or communities you don't want to track. Default: `[]`
 - `logger` (Logger): Pino logger instance (optional)
 
 **Returns:** Store instance with methods:
@@ -85,7 +85,30 @@ The store automatically creates the following tables:
 - `status_updates` - Status update tracking
 - `users` - User information
 
-## Performance Features
+## Features
+
+### Group Filtering
+
+You can exclude specific groups from being tracked in the database using the `skippedGroups` parameter:
+
+```typescript
+const store = makeMySQLStore(
+  "session_id",
+  pool,
+  [
+    "120363123456789012@g.us", // Large broadcast group
+    "120363987654321098@g.us" // Community you don't want to track
+  ],
+  logger
+);
+```
+
+**Important Notes:**
+
+- Groups in the `skippedGroups` array will **not** be stored in the database
+- **Exception:** If you are an admin or superadmin of a skipped group, it **will still be tracked**
+- This is useful for excluding large communities, broadcast groups, or groups you don't need to monitor
+- Group JIDs typically end with `@g.us`
 
 ### LRU Caching
 
