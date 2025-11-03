@@ -1,6 +1,6 @@
 {
   "name": "@theprodigy/baileys-mysql-store",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MySQL store implementation for Baileys WhatsApp library with LRU caching and batch processing",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
