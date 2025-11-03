@@ -1,5 +1,5 @@
 {
-  "name": "@baileys/mysql-store",
+  "name": "@theprodigy/baileys-mysql-store",
   "version": "1.0.0",
   "description": "MySQL store implementation for Baileys WhatsApp library with LRU caching and batch processing",
   "main": "dist/index.js",
@@ -18,7 +18,7 @@
     "cache",
     "persistence"
   ],
-  "author": "",
+  "author": "theprodigy",
   "license": "MIT",
   "dependencies": {
     "axios": "^1.6.0",
@@ -45,5 +45,13 @@
     "dist",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Prodigy90/baileys-mysql-store"
+  },
+  "bugs": {
+    "url": "https://github.com/Prodigy90/baileys-mysql-store/issues"
+  },
+  "homepage": "https://github.com/Prodigy90/baileys-mysql-store#readme"
 }
