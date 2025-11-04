@@ -2,6 +2,11 @@
 
 A comprehensive MySQL persistence solution for [@whiskeysockets/baileys](https://github.com/WhiskeySockets/Baileys), providing both authentication state management and data storage with LRU caching and batch processing.
 
+## Credits
+
+- **Authentication Implementation**: Original MySQL auth implementation by [@bobslavtriev](https://github.com/bobslavtriev/mysql-baileys)
+- **Enhancements**: Updated to use connection pooling for better performance and resource management
+
 ## Features
 
 ### 🔐 Authentication State Management
@@ -33,10 +38,7 @@ npm install @theprodigy/baileys-mysql-store baileys mysql2
 
 ```typescript
 import makeWASocket, { makeCacheableSignalKeyStore } from "baileys";
-import {
-  useMySQLAuthState,
-  makeMySQLStore
-} from "@theprodigy/baileys-mysql-store";
+import { createAuth, createStore } from "@theprodigy/baileys-mysql-store";
 import { createPool } from "mysql2/promise";
 import pino from "pino";
 
@@ -55,10 +57,10 @@ async function startWhatsApp() {
   const sessionId = "session_1";
 
   // Initialize MySQL auth state
-  const { state, saveCreds } = await useMySQLAuthState(pool, sessionId);
+  const { state, saveCreds } = await createAuth(pool, sessionId);
 
   // Initialize MySQL store
-  const store = makeMySQLStore(
+  const store = createStore(
     sessionId,
     pool,
     [], // Optional: array of group JIDs to skip tracking
@@ -98,7 +100,7 @@ startWhatsApp();
 ### Auth Only
 
 ```typescript
-import { useMySQLAuthState } from "@theprodigy/baileys-mysql-store";
+import { createAuth } from "@theprodigy/baileys-mysql-store";
 import { createPool } from "mysql2/promise";
 
 const pool = createPool({
@@ -108,10 +110,7 @@ const pool = createPool({
   password: "password"
 });
 
-const { state, saveCreds, removeCreds } = await useMySQLAuthState(
-  pool,
-  "session_1"
-);
+const { state, saveCreds, removeCreds } = await createAuth(pool, "session_1");
 
 // Use state.creds and state.keys with Baileys
 ```
@@ -119,7 +118,7 @@ const { state, saveCreds, removeCreds } = await useMySQLAuthState(
 ### Store Only
 
 ```typescript
-import { makeMySQLStore } from "@theprodigy/baileys-mysql-store";
+import { createStore } from "@theprodigy/baileys-mysql-store";
 import { createPool } from "mysql2/promise";
 
 const pool = createPool({
@@ -129,15 +128,17 @@ const pool = createPool({
   password: "password"
 });
 
-const store = makeMySQLStore("session_1", pool, [], logger);
+const store = createStore("session_1", pool, [], logger);
 await store.bind(socket.ev);
 ```
 
 ## API
 
-### `useMySQLAuthState(pool, session)`
+### `createAuth(pool, session)`
 
 Creates a MySQL-based authentication state for Baileys.
+
+**Aliases:** `useMySQLAuthState` (for backward compatibility)
 
 **Parameters:**
 
@@ -160,9 +161,11 @@ Automatically creates an `auth` table with columns:
 - `id` - Key identifier
 - `value` - JSON data
 
-### `makeMySQLStore(sessionId, pool, skippedGroups, logger)`
+### `createStore(sessionId, pool, skippedGroups, logger)`
 
 Creates a new MySQL store instance for WhatsApp data.
+
+**Aliases:** `makeMySQLStore` (for backward compatibility)
 
 **Parameters:**
 
@@ -208,7 +211,7 @@ The package automatically creates the following tables:
 You can exclude specific groups from being tracked in the database using the `skippedGroups` parameter:
 
 ```typescript
-const store = makeMySQLStore(
+const store = createStore(
   "session_id",
   pool,
   [
@@ -254,6 +257,7 @@ USER_SESSION=your_session_id
 
 MIT
 
-## Credits
+## Acknowledgments
 
-Built for use with [Baileys](https://github.com/WhiskeySockets/Baileys) - Lightweight full-featured WhatsApp Web + Multi-Device API
+- Built for use with [Baileys](https://github.com/WhiskeySockets/Baileys) - Lightweight full-featured WhatsApp Web + Multi-Device API
+- Original MySQL auth implementation by [@bobslavtriev](https://github.com/bobslavtriev/mysql-baileys)

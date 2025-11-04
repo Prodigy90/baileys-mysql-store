@@ -2,7 +2,7 @@ import pino from "pino";
 import { proto } from "baileys";
 import type makeWASocket from "baileys";
 import { type Pool } from "mysql2/promise";
-import { OptimizedMySQLStore } from "./optimized-mysql-store.js";
+import { OptimizedMySQLStore } from "./mysql-store.js";
 import type { GroupMetadataResult, GroupMetadataRow } from "./types.js";
 import {
   type Chat,
@@ -14,7 +14,7 @@ import {
 
 type WASocket = ReturnType<typeof makeWASocket>;
 
-interface makeMySQLStoreFunc {
+interface StoreInterface {
   state: ConnectionState | null;
   bind: (ev: BaileysEventEmitter) => Promise<void>;
   loadMessage: (id: string) => Promise<proto.IWebMessageInfo | undefined>;
@@ -74,7 +74,7 @@ interface makeMySQLStoreFunc {
  * @example
  * ```typescript
  * import { createPool } from 'mysql2/promise';
- * import { makeMySQLStore } from '@theprodigy/baileys-mysql-store';
+ * import { createStore } from '@theprodigy/baileys-mysql-store';
  *
  * const pool = createPool({
  *   host: 'localhost',
@@ -83,7 +83,7 @@ interface makeMySQLStoreFunc {
  *   password: 'password'
  * });
  *
- * const store = makeMySQLStore(
+ * const store = createStore(
  *   'session_1',
  *   pool,
  *   ['120363123456789012@g.us'], // Skip this group
@@ -93,12 +93,12 @@ interface makeMySQLStoreFunc {
  * await store.bind(socket.ev);
  * ```
  */
-export function makeMySQLStore(
+export function createStore(
   instanceId: string,
   pool: Pool,
-  skippedGroups: string[],
+  skippedGroups: string[] = [],
   logger?: pino.Logger
-): makeMySQLStoreFunc {
+): StoreInterface {
   if (!pool) {
     throw new Error("No MySQL connection pool provided");
   }
@@ -299,3 +299,7 @@ export function makeMySQLStore(
     fetchAllGroupsMetadata: store.fetchAllGroupsMetadata.bind(store)
   };
 }
+
+// Export for backward compatibility
+export { createStore as makeMySQLStore };
+

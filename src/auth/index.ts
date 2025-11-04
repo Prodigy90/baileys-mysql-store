@@ -1,3 +1,10 @@
+/**
+ * MySQL Authentication State Management for Baileys
+ * 
+ * Original implementation by @bobslavtriev (https://github.com/bobslavtriev/mysql-baileys)
+ * Enhanced to use connection pooling for better performance and resource management
+ */
+
 import {
   sqlData,
   SignalDataTypeMap,
@@ -18,7 +25,7 @@ import { BufferJSON, initAuthCreds, fromObject } from "./utils.js";
  * @example
  * ```typescript
  * import { createPool } from 'mysql2/promise';
- * import { useMySQLAuthState } from '@theprodigy/baileys-mysql-store';
+ * import { createAuth } from '@theprodigy/baileys-mysql-store';
  *
  * const pool = createPool({
  *   host: 'localhost',
@@ -27,7 +34,7 @@ import { BufferJSON, initAuthCreds, fromObject } from "./utils.js";
  *   password: 'password'
  * });
  *
- * const { state, saveCreds, removeCreds } = await useMySQLAuthState(
+ * const { state, saveCreds, removeCreds } = await createAuth(
  *   pool,
  *   'session_1'
  * );
@@ -66,7 +73,7 @@ async function connection(pool: Pool, tableName = "auth"): Promise<void> {
   }
 }
 
-export const useMySQLAuthState = async (
+export const createAuth = async (
   pool: Pool,
   session: string
 ): Promise<{
@@ -185,3 +192,7 @@ export const useMySQLAuthState = async (
     }
   };
 };
+
+// Export for backward compatibility
+export { createAuth as useMySQLAuthState };
+
