@@ -22,7 +22,6 @@ A comprehensive MySQL persistence solution for [@whiskeysockets/baileys](https:/
 - **LRU Caching** - Multi-tiered caching strategy for optimal performance
 - **Batch Processing** - Efficient bulk database operations with transactions
 - **Cache Warming** - Proactive cache loading for frequently accessed data
-- **Status Tracking** - Track WhatsApp status updates and views
 - **Group Filtering** - Exclude specific groups from tracking
 - **Optimized Queries** - Indexed queries and connection pooling
 
@@ -198,10 +197,6 @@ The package automatically creates the following tables:
 - `chats` - Chat conversations
 - `contacts` - Contact information
 - `groups_metadata` - Group metadata
-- `groups_status` - Group status updates
-- `status_updates` - Status update tracking
-- `status_viewers` - Status view tracking
-- `status_view_counts` - Aggregated status view counts
 - `users` - User information
 
 ## Features
@@ -234,7 +229,6 @@ const store = createStore(
 - **Groups**: 15-minute TTL
 - **Contacts**: 30-minute TTL
 - **Message Types**: 24-hour TTL
-- **Status Viewers**: 5-minute TTL
 
 ### Batch Processing
 

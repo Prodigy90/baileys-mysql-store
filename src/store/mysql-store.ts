@@ -7,7 +7,7 @@ import type makeWASocket from "baileys";
 import { isJidUser } from "./utils/jid.js";
 import { CacheWarmer } from "./utils/cache-warmer.js";
 import { type Pool, type RowDataPacket } from "mysql2/promise";
-import { jidNormalizedUser, isJidStatusBroadcast } from "baileys";
+
 import { BatchProcessor, DbHelpers } from "./utils/batch-processor.js";
 import {
   type Chat,
@@ -32,7 +32,6 @@ const CACHE_CONFIG = {
   TTL: {
     // Fast-changing data
     MESSAGES: 1000 * 60 * 5,
-    STATUS_UPDATES: 1000 * 60 * 5,
 
     // Medium-changing data
     CHATS: 1000 * 60 * 15,
@@ -70,210 +69,13 @@ export function getTTL(cacheKey: string): number {
     return CACHE_CONFIG.TTL.GROUP_METADATA;
   }
 
-  if (cacheKey.startsWith("status_")) {
-    return CACHE_CONFIG.TTL.STATUS_UPDATES;
-  }
-
   return CACHE_CONFIG.TTL.DEFAULT;
-}
-
-/**
- * StatusViewTracker class for efficient tracking of status views
- * Uses LRU cache to prevent duplicate counts and batch processing for performance
- */
-class StatusViewTracker {
-  private viewerCache: LRUCache<string, boolean>;
-  private statusCache: LRUCache<string, any>;
-  private messageTypeCache: LRUCache<string, string>;
-
-  constructor(
-    private pool: Pool,
-    private logger: pino.Logger,
-    private instance_id: string,
-    private batchProcessor: BatchProcessor
-  ) {
-    // Cache for tracking viewers to prevent duplicate counts
-    this.viewerCache = new LRUCache<string, boolean>({
-      max: 1000,
-      ttl: 1000 * 60 * 60, // 1 hour
-      ttlAutopurge: true
-    });
-
-    // Cache for status metadata
-    this.statusCache = new LRUCache<string, any>({
-      max: 500,
-      ttl: 1000 * 60 * 15, // 15 minutes
-      ttlAutopurge: true
-    });
-
-    // Cache for message types (static data, longer TTL)
-    this.messageTypeCache = new LRUCache<string, string>({
-      max: 1000,
-      ttl: 1000 * 60 * 60 * 24, // 24 hours
-      ttlAutopurge: true
-    });
-  }
-
-  /**
-   * Process a view for a status update
-   * @param statusId The ID of the status
-   * @param viewerJid The JID of the viewer
-   * @param mediaType The type of media in the status
-   * @returns boolean indicating if the view was counted (true) or was a duplicate (false)
-   */
-  async processView(
-    statusId: string,
-    viewerJid: string,
-    mediaType: string
-  ): Promise<boolean> {
-    const cacheKey = `${statusId}_${viewerJid}`;
-
-    // First check the cache to see if we've already processed this view
-    if (this.viewerCache.has(cacheKey)) {
-      return false;
-    }
-
-    // Then check the database to see if this view already exists
-    const exists = await this.checkViewerExists(statusId, viewerJid);
-    if (exists) {
-      // If it exists in the database, add to cache and return false
-      this.viewerCache.set(cacheKey, true);
-      return false;
-    }
-
-    // At this point, we know it's a new view
-    // Add to cache to prevent duplicate counts
-    this.viewerCache.set(cacheKey, true);
-
-    // Current timestamp for the view
-    const viewDate = new Date().toISOString().slice(0, 19).replace("T", " ");
-
-    // Queue the viewer record
-    this.batchProcessor.queueItem("status_viewers", {
-      instance_id: this.instance_id,
-      status_id: statusId,
-      viewer_jid: viewerJid,
-      view_date: viewDate
-    });
-
-    // Increment the view count in status_updates
-    this.batchProcessor.queueItem("status_updates", {
-      id: statusId,
-      view_count_increment: 1
-    });
-
-    // Update or insert into status_view_counts
-    this.batchProcessor.queueItem("status_view_counts", {
-      instance_id: this.instance_id,
-      status_id: statusId,
-      media_type: mediaType,
-      total_views_increment: 1,
-      last_updated: viewDate
-    });
-
-    return true;
-  }
-
-  /**
-   * Check if a viewer has already viewed a status
-   */
-  private async checkViewerExists(
-    statusId: string,
-    viewerJid: string
-  ): Promise<boolean> {
-    const [rows] = await this.pool.query(
-      "SELECT 1 FROM status_viewers WHERE status_id = ? AND viewer_jid = ? LIMIT 1",
-      [statusId, viewerJid]
-    );
-    return (rows as any[]).length > 0;
-  }
-
-  /**
-   * Get status view information
-   * @param statusId The ID of the status
-   * @returns Object with view count and media type
-   */
-  async getStatusViewInfo(
-    statusId: string
-  ): Promise<{ viewCount: number; mediaType: string } | null> {
-    const cacheKey = `status_view_${statusId}`;
-
-    if (this.statusCache.has(cacheKey)) {
-      return this.statusCache.get(cacheKey);
-    }
-
-    try {
-      const [rows] = await this.pool.query(
-        `SELECT total_views, media_type
-         FROM status_view_counts
-         WHERE instance_id = ? AND status_id = ?`,
-        [this.instance_id, statusId]
-      );
-
-      if ((rows as any[]).length === 0) {
-        return null;
-      }
-
-      const result = {
-        viewCount: (rows as any[])[0].total_views,
-        mediaType: (rows as any[])[0].media_type
-      };
-
-      this.statusCache.set(cacheKey, result);
-      return result;
-    } catch (error) {
-      this.logger.error({ error, statusId }, "Failed to get status view info");
-      return null;
-    }
-  }
-
-  /**
-   * Clear the caches
-   */
-  clearCache(): void {
-    this.viewerCache.clear();
-    this.statusCache.clear();
-    this.messageTypeCache.clear();
-  }
-
-  /**
-   * Get message type for a status, with caching
-   * @param statusId The ID of the status
-   * @returns The message type or null if not found
-   */
-  async getMessageType(statusId: string): Promise<string | null> {
-    // Check cache first
-    if (this.messageTypeCache.has(statusId)) {
-      return this.messageTypeCache.get(statusId) || null;
-    }
-
-    try {
-      const [rows] = await this.pool.query(
-        "SELECT message_type FROM status_updates WHERE instance_id = ? AND status_id = ?",
-        [this.instance_id, statusId]
-      );
-
-      if ((rows as any[]).length === 0) {
-        return null;
-      }
-
-      const messageType = (rows as any[])[0].message_type;
-
-      // Cache the result
-      this.messageTypeCache.set(statusId, messageType);
-      return messageType;
-    } catch (error) {
-      this.logger.error({ error, statusId }, "Failed to get message type");
-      return null;
-    }
-  }
 }
 
 export class OptimizedMySQLStore {
   private dbHelpers: DbHelpers;
   private cacheWarmer: CacheWarmer;
   private cache: LRUCache<string, any>;
-  private statusViewTracker: StatusViewTracker;
   state: ConnectionState | null = null;
   private batchProcessor: BatchProcessor;
 
@@ -305,12 +107,6 @@ export class OptimizedMySQLStore {
     this.logger = logger || pino({ level: "info" });
     this.batchProcessor = new BatchProcessor(pool, this.logger);
     this.dbHelpers = new DbHelpers(pool, this.logger, this.cache);
-    this.statusViewTracker = new StatusViewTracker(
-      pool,
-      this.logger,
-      instance_id,
-      this.batchProcessor
-    );
     this.cacheWarmer = new CacheWarmer(
       pool,
       this.cache,
@@ -323,22 +119,6 @@ export class OptimizedMySQLStore {
       .catch((err) =>
         this.logger.error({ err }, "Failed to start cache warming")
       );
-
-    // Schedule automatic cleanup of status data
-    // Run cleanup once a day (24 hours)
-    setInterval(() => {
-      this.cleanupStatusData().catch((err) =>
-        this.logger.error(
-          { err },
-          "Failed to run automatic status data cleanup"
-        )
-      );
-    }, 1000 * 60 * 60 * 24); // 24 hours
-
-    // Run initial cleanup
-    this.cleanupStatusData().catch((err) =>
-      this.logger.error({ err }, "Failed to run initial status data cleanup")
-    );
   }
 
   /**
@@ -622,27 +402,6 @@ export class OptimizedMySQLStore {
     return messageType ? messageTypeMap[messageType] || "unknown" : "unknown";
   };
 
-  async getStatusInDBResult(id: string): Promise<Boolean> {
-    try {
-      const statusInDBSql = `
-      SELECT EXISTS(
-        SELECT 1
-        FROM status_updates
-        WHERE status_id = ? AND instance_id = ?
-      ) AS exists_flag;
-    `;
-
-      const statusInDBResult = await this.customQuery(statusInDBSql, [
-        id,
-        this.instance_id
-      ]);
-      return statusInDBResult[0].exists_flag === 1;
-    } catch (error) {
-      this.logger.error({ error }, "Error checking if status is in db");
-      return false;
-    }
-  }
-
   async getUserData(): Promise<any | null> {
     return await this.dbHelpers.getFromCacheOrDb(
       `${this.instance_id}_user_cache`,
@@ -791,207 +550,6 @@ export class OptimizedMySQLStore {
       );
       throw error;
     }
-  }
-
-  /**
-   * Store a status update manually
-   * @param message The status message to store
-   * @returns boolean indicating if the status was newly stored (true) or already existed (false)
-   */
-  async storeStatusUpdate(message: proto.IWebMessageInfo): Promise<boolean> {
-    if (
-      !message.key?.id ||
-      !isJidStatusBroadcast(message.key.remoteJid as string)
-    ) {
-      throw new Error("Invalid status message");
-    }
-
-    try {
-      // Check if status already exists
-      const exists = await this.getStatusInDBResult(message.key.id);
-      if (exists) {
-        return false;
-      }
-
-      const localTime = moment
-        .utc(new Date())
-        .tz("Africa/Lagos")
-        .format("YYYY-MM-DD HH:mm:ss");
-
-      const messageType = this.getMessageType(message);
-      if (messageType === "unknown") {
-        return false;
-      }
-
-      // Queue the status update
-      this.batchProcessor.queueItem(
-        "status_updates",
-        {
-          instance_id: this.instance_id,
-          status_id: message.key.id,
-          status_message: message,
-          post_date: localTime,
-          message_type: messageType
-        },
-        3
-      );
-
-      // Initialize the view count record
-      this.batchProcessor.queueItem("status_view_counts", {
-        instance_id: this.instance_id,
-        status_id: message.key.id,
-        media_type: messageType,
-        total_views: 0,
-        last_updated: localTime
-      });
-
-      return true;
-    } catch (error) {
-      this.logger.error(
-        { error, messageId: message.key.id },
-        "Failed to store status update"
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Clean up old status data
-   * @param viewerRetentionDays Days to retain viewer data (default: 7)
-   * @param countRetentionDays Days to retain view count data (default: 30)
-   */
-  async cleanupStatusData(
-    viewerRetentionDays = 7,
-    countRetentionDays = 30
-  ): Promise<void> {
-    try {
-      // Calculate cutoff dates
-      const viewerCutoffDate = new Date();
-      viewerCutoffDate.setDate(
-        viewerCutoffDate.getDate() - viewerRetentionDays
-      );
-
-      const countCutoffDate = new Date();
-      countCutoffDate.setDate(countCutoffDate.getDate() - countRetentionDays);
-
-      // Format dates for SQL
-      const viewerCutoff = viewerCutoffDate
-        .toISOString()
-        .slice(0, 19)
-        .replace("T", " ");
-      const countCutoff = countCutoffDate
-        .toISOString()
-        .slice(0, 19)
-        .replace("T", " ");
-
-      // Delete old viewer records
-      await this.pool.query(
-        `DELETE v FROM status_viewers v
-         WHERE v.instance_id = ? AND v.view_date < ?`,
-        [this.instance_id, viewerCutoff]
-      );
-
-      // Delete old view count records
-      await this.pool.query(
-        `DELETE c FROM status_view_counts c
-         WHERE c.instance_id = ? AND c.last_updated < ?`,
-        [this.instance_id, countCutoff]
-      );
-
-      // Delete old status updates that don't have view counts
-      await this.pool.query(
-        `DELETE s FROM status_updates s
-         LEFT JOIN status_view_counts c ON s.instance_id = c.instance_id AND s.status_id = c.status_id
-         WHERE s.instance_id = ? AND s.post_date < ? AND c.id IS NULL`,
-        [this.instance_id, viewerCutoff]
-      );
-
-      this.logger.info(
-        { viewerRetentionDays, countRetentionDays },
-        "Status data cleanup completed"
-      );
-    } catch (error) {
-      this.logger.error({ error }, "Failed to clean up status data");
-      throw error;
-    }
-  }
-
-  /**
-   * Get recent status updates with pagination and improved caching
-   * @param options Optional pagination parameters
-   * @returns Array of status messages with view counts and media type
-   */
-  async getRecentStatusUpdates(options?: {
-    limit?: number;
-    offset?: number;
-  }): Promise<proto.IWebMessageInfo[]> {
-    const limit = options?.limit || 50;
-    const offset = options?.offset || 0;
-    const cacheKey = `status_updates_${this.instance_id}_${limit}_${offset}`;
-
-    // Try to get from cache first
-    if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey) as proto.IWebMessageInfo[];
-    }
-
-    const messages: proto.IWebMessageInfo[] = [];
-    try {
-      // Join with status_view_counts to get the latest view counts
-      const [rows] = await this.pool.query<RowDataPacket[]>(
-        `SELECT s.status_message, s.message_type, s.post_date,
-                COALESCE(c.total_views, s.view_count) as view_count,
-                c.media_type
-         FROM status_updates s
-         LEFT JOIN status_view_counts c ON s.instance_id = c.instance_id AND s.status_id = c.status_id
-         WHERE s.instance_id = ?
-           AND s.post_date >= NOW() - INTERVAL 24 HOUR
-         ORDER BY s.post_date DESC
-         LIMIT ? OFFSET ?`,
-        [this.instance_id, limit, offset]
-      );
-
-      for (const row of rows) {
-        try {
-          const message =
-            typeof row.status_message === "object"
-              ? row.status_message
-              : JSON.parse(row.status_message.toString());
-
-          const postDate = new Date(row.post_date);
-          const formattedTime = `${postDate
-            .getHours()
-            .toString()
-            .padStart(2, "0")}:${postDate
-            .getMinutes()
-            .toString()
-            .padStart(2, "0")}`;
-
-          message.post_time = formattedTime;
-          message.view_count = row.view_count;
-          message.message_type = row.message_type || row.media_type;
-          message.media_type = row.media_type;
-
-          messages.push(message);
-        } catch (parseError) {
-          this.logger.error(
-            { error: parseError },
-            "Failed to parse status message data"
-          );
-        }
-      }
-
-      // Cache the results
-      this.cache.set(cacheKey, messages, {
-        ttl: CACHE_CONFIG.TTL.STATUS_UPDATES
-      });
-    } catch (error) {
-      this.logger.error(
-        { error, instance_id: this.instance_id },
-        "Error fetching recent status updates"
-      );
-    }
-
-    return messages;
   }
 
   async loadAllGroupsMetadata(): Promise<GroupMetadata[]> {
@@ -1381,14 +939,6 @@ export class OptimizedMySQLStore {
                   },
                   2
                 );
-
-                if (
-                  isJidStatusBroadcast(message.key.remoteJid as string) &&
-                  !message.message?.reactionMessage
-                ) {
-                  // Use the storeStatusUpdate method
-                  await this.storeStatusUpdate(message);
-                }
               } else if (isJidUser(message.key.remoteJid as string)) {
                 const remoteJid = message.key.remoteJid as string;
                 const [chat, contact] = await Promise.all([
@@ -1440,51 +990,6 @@ export class OptimizedMySQLStore {
           this.logger.error(
             { error, key: { instanceId: this.instance_id } },
             "Failed to handle message upserts"
-          );
-        }
-      }
-    );
-
-    ev.on(
-      "message-receipt.update",
-      async (updates: { key: proto.IMessageKey }[]) => {
-        try {
-          await Promise.all(
-            updates.map(async (update) => {
-              if (
-                update.key.id &&
-                update.key.fromMe &&
-                isJidStatusBroadcast(update.key.remoteJid as string)
-              ) {
-                const inDB = await this.getStatusInDBResult(update.key.id);
-                if (!inDB) {
-                  return;
-                }
-
-                const viewer_jid = jidNormalizedUser(
-                  update.key.participant as string
-                );
-
-                // Get the message type from cache or database
-                const messageType = await this.statusViewTracker.getMessageType(
-                  update.key.id
-                );
-
-                if (messageType) {
-                  // Use the StatusViewTracker to process the view
-                  await this.statusViewTracker.processView(
-                    update.key.id,
-                    viewer_jid,
-                    messageType
-                  );
-                }
-              }
-            })
-          );
-        } catch (error) {
-          this.logger.error(
-            { error, key: { instanceId: this.instance_id } },
-            "Failed to handle message-receipt updates"
           );
         }
       }
