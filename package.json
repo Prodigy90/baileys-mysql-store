@@ -24,6 +24,7 @@
     "axios": "^1.6.0",
     "baileys": "^7.0.0-rc.6",
     "cache-manager": "^5.7.6",
+    "libsignal": "github:adiwajshing/libsignal-node",
     "lodash": "^4.17.21",
     "lru-cache": "^11.1.0",
     "moment-timezone": "^0.5.48",

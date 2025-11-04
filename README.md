@@ -1,15 +1,25 @@
 # Baileys MySQL Store
 
-A high-performance MySQL store implementation for [@whiskeysockets/baileys](https://github.com/WhiskeySockets/Baileys) with LRU caching and batch processing.
+A comprehensive MySQL persistence solution for [@whiskeysockets/baileys](https://github.com/WhiskeySockets/Baileys), providing both authentication state management and data storage with LRU caching and batch processing.
 
 ## Features
 
-- ✅ **MySQL Persistence** - Store all WhatsApp data in MySQL database
-- ⚡ **LRU Caching** - Multi-tiered caching strategy for optimal performance
-- 📦 **Batch Processing** - Efficient bulk database operations with transactions
-- �� **Cache Warming** - Proactive cache loading for frequently accessed data
-- 📊 **Status Tracking** - Track WhatsApp status updates and views
-- 🎯 **Optimized Queries** - Indexed queries and connection pooling
+### 🔐 Authentication State Management
+
+- **MySQL-based Auth Storage** - Store authentication credentials and keys in MySQL
+- **Multi-session Support** - Handle multiple WhatsApp sessions with a single database
+- **Automatic Table Creation** - Database schema is created automatically
+- **Connection Pooling** - Efficient database connection management
+
+### 💾 Data Store
+
+- **MySQL Persistence** - Store all WhatsApp data in MySQL database
+- **LRU Caching** - Multi-tiered caching strategy for optimal performance
+- **Batch Processing** - Efficient bulk database operations with transactions
+- **Cache Warming** - Proactive cache loading for frequently accessed data
+- **Status Tracking** - Track WhatsApp status updates and views
+- **Group Filtering** - Exclude specific groups from tracking
+- **Optimized Queries** - Indexed queries and connection pooling
 
 ## Installation
 
@@ -19,12 +29,20 @@ npm install @theprodigy/baileys-mysql-store baileys mysql2
 
 ## Usage
 
-```typescript
-import makeWASocket from "baileys";
-import { makeMySQLStore } from "@theprodigy/baileys-mysql-store";
-import { createPool } from "mysql2/promise";
+### Complete Example (Auth + Store)
 
-// Create MySQL connection pool
+```typescript
+import makeWASocket, { makeCacheableSignalKeyStore } from "baileys";
+import {
+  useMySQLAuthState,
+  makeMySQLStore
+} from "@theprodigy/baileys-mysql-store";
+import { createPool } from "mysql2/promise";
+import pino from "pino";
+
+const logger = pino({ level: "info" });
+
+// Create MySQL connection pool (shared by both auth and store)
 const pool = createPool({
   host: "localhost",
   user: "your_user",
@@ -33,29 +51,118 @@ const pool = createPool({
   connectionLimit: 5
 });
 
-// Initialize the store
-const store = makeMySQLStore(
-  "session_id", // Your session identifier
-  pool, // MySQL pool
-  [], // Optional: array of group JIDs to skip tracking (unless you're admin)
-  logger // Optional: Pino logger instance
-);
+async function startWhatsApp() {
+  const sessionId = "session_1";
 
-// Create WhatsApp socket
-const sock = makeWASocket({
-  auth: state
-  // ... other options
+  // Initialize MySQL auth state
+  const { state, saveCreds } = await useMySQLAuthState(pool, sessionId);
+
+  // Initialize MySQL store
+  const store = makeMySQLStore(
+    sessionId,
+    pool,
+    [], // Optional: array of group JIDs to skip tracking
+    logger
+  );
+
+  // Create WhatsApp socket
+  const sock = makeWASocket({
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, logger)
+    },
+    logger,
+    printQRInTerminal: true
+  });
+
+  // Bind store to socket events
+  await store.bind(sock.ev);
+
+  // Save credentials on update
+  sock.ev.on("creds.update", saveCreds);
+
+  // Handle connection updates
+  sock.ev.on("connection.update", (update) => {
+    const { connection, lastDisconnect } = update;
+    if (connection === "close") {
+      console.log("Connection closed");
+    } else if (connection === "open") {
+      console.log("Connection opened");
+    }
+  });
+}
+
+startWhatsApp();
+```
+
+### Auth Only
+
+```typescript
+import { useMySQLAuthState } from "@theprodigy/baileys-mysql-store";
+import { createPool } from "mysql2/promise";
+
+const pool = createPool({
+  host: "localhost",
+  user: "root",
+  database: "whatsapp_db",
+  password: "password"
 });
 
-// Bind store to socket events
-await store.bind(sock.ev);
+const { state, saveCreds, removeCreds } = await useMySQLAuthState(
+  pool,
+  "session_1"
+);
+
+// Use state.creds and state.keys with Baileys
+```
+
+### Store Only
+
+```typescript
+import { makeMySQLStore } from "@theprodigy/baileys-mysql-store";
+import { createPool } from "mysql2/promise";
+
+const pool = createPool({
+  host: "localhost",
+  user: "root",
+  database: "whatsapp_db",
+  password: "password"
+});
+
+const store = makeMySQLStore("session_1", pool, [], logger);
+await store.bind(socket.ev);
 ```
 
 ## API
 
+### `useMySQLAuthState(pool, session)`
+
+Creates a MySQL-based authentication state for Baileys.
+
+**Parameters:**
+
+- `pool` (Pool): mysql2 connection pool
+- `session` (string): Session name to identify the connection (allows multi-sessions)
+
+**Returns:** Object with:
+
+- `state` - Authentication state object with `creds` and `keys`
+- `saveCreds()` - Function to save credentials to database
+- `clear()` - Clear all auth data except credentials
+- `removeCreds()` - Remove all auth data including credentials
+- `query(sql, values)` - Execute custom SQL query
+
+**Database Table:**
+
+Automatically creates an `auth` table with columns:
+
+- `session` - Session identifier
+- `id` - Key identifier
+- `value` - JSON data
+
 ### `makeMySQLStore(sessionId, pool, skippedGroups, logger)`
 
-Creates a new MySQL store instance.
+Creates a new MySQL store instance for WhatsApp data.
 
 **Parameters:**
 
@@ -72,10 +179,17 @@ Creates a new MySQL store instance.
 - `getAllContacts()` - Get all contacts
 - `loadAllGroupsMetadata()` - Load all group metadata
 - `customQuery(query, params)` - Execute custom SQL query
+- And many more...
 
 ## Database Schema
 
-The store automatically creates the following tables:
+The package automatically creates the following tables:
+
+### Authentication Tables
+
+- `auth` - Authentication credentials and keys (session, id, value)
+
+### Store Tables
 
 - `messages` - WhatsApp messages
 - `chats` - Chat conversations
@@ -83,6 +197,8 @@ The store automatically creates the following tables:
 - `groups_metadata` - Group metadata
 - `groups_status` - Group status updates
 - `status_updates` - Status update tracking
+- `status_viewers` - Status view tracking
+- `status_view_counts` - Aggregated status view counts
 - `users` - User information
 
 ## Features

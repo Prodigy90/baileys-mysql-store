@@ -14,3 +14,12 @@ export type {
   GroupMetadataResult
 } from "./types.js";
 export { messageTypeMap } from "./types.js";
+
+// Auth exports
+export { useMySQLAuthState } from "./auth/useMySQLAuthState.js";
+export type {
+  AuthenticationState,
+  AuthenticationCreds,
+  SignalDataTypeMap,
+  KeyPair
+} from "./auth/types.js";
