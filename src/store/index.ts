@@ -30,10 +30,6 @@ interface StoreInterface {
   getContactById: (jid: string) => Promise<Contact | undefined>;
   getGroupByJid: (jid: string) => Promise<GroupMetadataRow | null>;
   removeAllData: () => Promise<void>;
-  getRecentStatusUpdates: (options?: {
-    limit?: number;
-    offset?: number;
-  }) => Promise<proto.IWebMessageInfo[]>;
   fetchGroupMetadata: (
     jid: string,
     sock: WASocket | undefined
@@ -51,11 +47,6 @@ interface StoreInterface {
     lid?: string | null
   ) => Promise<void>;
   getUserLid: () => Promise<string | null>;
-  storeStatusUpdate: (message: proto.IWebMessageInfo) => Promise<boolean>;
-  cleanupStatusData: (
-    viewerRetentionDays?: number,
-    countRetentionDays?: number
-  ) => Promise<void>;
 }
 
 /**
@@ -132,31 +123,6 @@ export function createStore(
 
   const createTables = async () => {
     const schema = [
-      `CREATE TABLE IF NOT EXISTS status_updates (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        instance_id VARCHAR(255) NOT NULL,
-        message_type VARCHAR(50) NOT NULL,
-        status_id VARCHAR(255) NOT NULL,
-        post_date DATETIME NOT NULL,
-        view_count INT DEFAULT 0,
-        status_message JSON,
-        INDEX idx_instance_date (instance_id, post_date),
-        INDEX idx_post_date (post_date),
-        UNIQUE(instance_id, status_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-
-      `CREATE TABLE IF NOT EXISTS status_view_counts (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        instance_id VARCHAR(255) NOT NULL,
-        status_id VARCHAR(255) NOT NULL,
-        media_type VARCHAR(50) NOT NULL,
-        total_views INT DEFAULT 0,
-        last_updated DATETIME NOT NULL,
-        INDEX idx_instance_status (instance_id, status_id),
-        INDEX idx_cleanup (last_updated),
-        UNIQUE(instance_id, status_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-
       `CREATE TABLE IF NOT EXISTS messages (
         id INT AUTO_INCREMENT PRIMARY KEY,
         instance_id VARCHAR(255) NOT NULL,
@@ -165,17 +131,6 @@ export function createStore(
         message_data JSON,
         INDEX idx_instance_date (instance_id, post_date),
         UNIQUE(instance_id, message_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
-
-      // Status Viewers Table
-      `CREATE TABLE IF NOT EXISTS status_viewers (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        instance_id VARCHAR(255) NOT NULL,
-        status_id VARCHAR(255) NOT NULL,
-        viewer_jid VARCHAR(255) NOT NULL,
-        view_date DATETIME NOT NULL,
-        INDEX idx_instance_status (instance_id, status_id),
-        UNIQUE(instance_id, status_id, viewer_jid)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
       // Contacts Table
@@ -290,16 +245,12 @@ export function createStore(
     getAllContacts: store.getAllContacts.bind(store),
     getContactById: store.getContactById.bind(store),
     clearGroupsData: store.clearGroupsData.bind(store),
-    storeStatusUpdate: store.storeStatusUpdate.bind(store),
-    cleanupStatusData: store.cleanupStatusData.bind(store),
     fetchGroupMetadata: store.fetchGroupMetadata.bind(store),
     getAllSavedContacts: store.getAllSavedContacts.bind(store),
     loadAllGroupsMetadata: store.loadAllGroupsMetadata.bind(store),
-    getRecentStatusUpdates: store.getRecentStatusUpdates.bind(store),
     fetchAllGroupsMetadata: store.fetchAllGroupsMetadata.bind(store)
   };
 }
 
 // Export for backward compatibility
 export { createStore as makeMySQLStore };
-
