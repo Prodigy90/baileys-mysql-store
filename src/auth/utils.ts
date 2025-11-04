@@ -8,22 +8,22 @@ import {
   Fingerprint
 } from "./types.js";
 
-const generateKeyPair = () => {
+const generateKeyPair = (): KeyPair => {
   const { pubKey, privKey } = curve.generateKeyPair();
   return {
-    private: Buffer.from(privKey),
-    public: Buffer.from(pubKey.slice(1))
+    private: privKey,
+    public: pubKey.length === 33 ? pubKey.subarray(1) : pubKey
   };
 };
 
-const generateSignalPubKey = (pubKey: Uint8Array) => {
+const generateSignalPubKey = (pubKey: Uint8Array): Uint8Array => {
   return pubKey.length === 33
     ? pubKey
     : Buffer.concat([Buffer.from([5]), pubKey]);
 };
 
-const sign = (privateKey: object, buf: Uint8Array) => {
-  return curve.calculateSignature(privateKey, buf);
+const sign = (privateKey: Uint8Array, buf: Uint8Array): Buffer => {
+  return curve.calculateSignature(Buffer.from(privateKey), Buffer.from(buf));
 };
 
 const signedKeyPair = (identityKeyPair: KeyPair, keyId: number) => {

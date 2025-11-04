@@ -60,8 +60,8 @@ async function connection(pool: Pool, tableName = "auth"): Promise<void> {
       );
       newConnection = false;
     } catch (error) {
-      console.error("Error creating auth table:", error);
-      throw new Error("Failed to initialize database connection for auth");
+      console.error("Error creating table:", error);
+      throw new Error("Failed to initialize database connection");
     }
   }
 }

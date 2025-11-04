@@ -2,13 +2,6 @@ import { Connection } from "mysql2/promise";
 
 type Awaitable<T> = T | Promise<T>;
 
-// Long type for timestamp handling
-type Long = {
-  low: number;
-  high: number;
-  unsigned: boolean;
-};
-
 type Contact = {
   id: string;
   lid?: string;
